@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: API de libros y autores
+
+Resources:
+  # Tabla DynamoDB para libros
+  BooksTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Books
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: author
+          AttributeType: S
+        - AttributeName: title
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: AuthorIndex
+          KeySchema:
+            - AttributeName: author
+              KeyType: HASH
+            - AttributeName: title
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+  # Tabla DynamoDB para libros
+  AuthorsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Authors
+      AttributeDefinitions:
+        - AttributeName: rut
+          AttributeType: S
+        - AttributeName: names
+          AttributeType: S
+        - AttributeName: surnames
+          AttributeType: S
+      KeySchema:
+        - AttributeName: rut
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: NameIndex
+          KeySchema:
+            - AttributeName: names
+              KeyType: HASH
+            - AttributeName: surnames
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
