@@ -54,3 +54,14 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+  GenresTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Genres
+      AttributeDefinitions:
+        - AttributeName: name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: name
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
