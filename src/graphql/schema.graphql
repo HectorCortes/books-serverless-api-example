@@ -1,0 +1,68 @@
+type BookGenre {
+  id: ID!
+  name: String!
+}
+
+type Query {
+  getAllGenres: [BookGenre]
+  getSingleGenre(id: ID!): BookGenre
+}
+
+input BookGenreInput {
+  name: String!
+}
+
+type Mutation {
+  createSingleGenre(request: BookGenreInput): BookGenre
+}
+
+type Author {
+  rut: ID!
+  names: String!
+  surnames: String!
+  birthDate: Float
+  updatedAt: Float
+  createdAt: Float
+}
+
+type Query {
+  getAllAuthors: [Author]
+  getSingleAuthor(rut: ID!): Author
+}
+
+input AuthorInput {
+  rut: ID!
+  names: String!
+  surnames: String!
+  birthDate: Float
+}
+
+type Mutation {
+  createSingleAuthor(request: AuthorInput!): Author
+}
+
+type Book {
+  id: ID!
+  author: Author!
+  title: String!
+  genres: [BookGenre]
+  publishedAt: Float
+  updatedAt: Float
+  createdAt: Float
+}
+
+type Query {
+  getAllBooks: [Book]
+  getSingleBook(rut: ID!): Book
+}
+
+input BookInput {
+  author: Author!
+  title: String!
+  genres: [BookGenre]
+  publishedAt: Float
+}
+
+type Mutation {
+  createSingleBook(request: BookInput!): Book
+}

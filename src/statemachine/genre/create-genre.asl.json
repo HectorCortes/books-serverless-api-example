@@ -1,0 +1,33 @@
+{
+  "Comment": "A state machine that creates a new book genre",
+  "StartAt": "ValidateGenre",
+  "States": {
+    "ValidateGenre": {
+      "Type": "Task",
+      "Resource": "${GenreExistsFunctionArn}",
+      "ResultPath": "$.validation",
+      "Next": "Validated?"
+    },
+    "Validated?": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.validation",
+          "BooleanEquals": false,
+          "Next": "CreateGenre"
+        }
+      ],
+      "Default": "ValidationError"
+    },
+    "CreateGenre": {
+      "Type": "Task",
+      "Resource": "${GenreCreateFunctionArn}",
+      "End": true
+    },
+    "ValidationError": {
+      "Type": "Fail",
+      "Cause": "El género literario ya existe",
+      "Error": "ValidationError"
+    }
+  }
+}

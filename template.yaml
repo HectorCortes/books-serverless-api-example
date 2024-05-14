@@ -1,10 +1,149 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-
 Description: API de libros y autores
 
+Parameters:
+  UserPoolName:
+    Type: String
+    Default: HCVUserPool
+    Description: The User Pool Name
+  UserPoolClientName:
+    Type: String
+    Default: HCVUserPoolClient
+    Description: The User Pool Client Name
+
+Globals:
+  Function:
+    Timeout: 5
+    Runtime: nodejs18.x
+
 Resources:
-  # Tabla DynamoDB para libros
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: dev
+
+  AppSyncServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: appsync.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: AppSyncServiceRole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: lambda:invokeFunction
+                Resource:
+                  - !Sub arn:aws:lambda:${AWS::Region}:*:*
+              - Effect: Allow
+                Action:
+                  - states:StartSyncExecution
+                Resource:
+                  - !Ref CreateGenreStateMachine
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt BooksTable.Arn
+                  - !GetAtt AuthorsTable.Arn
+                  - !GetAtt GenresTable.Arn
+
+  CreateGenreLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 1
+
+  # GraphQLApi:
+  #   Type: AWS::AppSync::GraphQLApi
+  #   Properties:
+  #     AuthenticationType: AMAZON_COGNITO_USER_POOLS
+  #     UserPoolConfig:
+  #       UserPoolId: !Ref UserPool
+  #       AwsRegion: !Sub ${AWS::Region}
+  #       DefaultAction: ALLOW
+  # GraphQLSchema:
+  #   Type: AWS::AppSync::GraphQLSchema
+  #   Properties:
+  #     ApiId: !GetAtt GraphQLApi.ApiId
+  #     DefinitionS3Location: "src/graphql/schema.graphql"
+
+  # StepFunctionsSyncHttpDataSource:
+  #   Type: AWS::AppSync::DataSource
+  #   Properties:
+  #     ApiId: !GetAtt GraphQLApi.ApiId
+  #     Name: StepFunctionsSyncHttpDataSource
+  #     Description: Step Functions HTTP
+  #     Type: HTTP
+  #     ServiceRoleArn: !GetAtt AppSyncServiceRole.Arn
+  #     HttpConfig:
+  #       Endpoint: !Sub https://sync-states.${AWS::Region}.amazonaws.com/
+  #       AuthorizationConfig:
+  #         AuthorizationType: AWS_IAM
+  #         AwsIamConfig:
+  #           SigningRegion: !Ref AWS::Region
+  #           SigningServiceName: states
+
+  # createSingleGenreResolver:
+  #   Type: AWS::AppSync::Resolver
+  #   Properties:
+  #     ApiId: !GetAtt GraphQLApi.ApiId
+  #     TypeName: Mutation
+  #     FieldName: createSingleGenre
+  #     DataSourceName: !GetAtt StepFunctionsSyncHttpDataSource.Name
+  #     CodeS3Location: src/resolvers/createSingleGenre.asl
+
+  CreateGenreStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Type: EXPRESS
+      Name: CreateGenreStateMachine
+      DefinitionSubstitutions:
+        GenreExistsFunctionArn: !GetAtt GenreExistsFunction.Arn
+        GenreCreateFunctionArn: !GetAtt GenreCreateFunction.Arn
+      Events:
+        ValidationApiEvent:
+          Type: Api
+          Properties:
+            Method: post
+            Path: /genre
+            RestApiId: !Ref MyApi
+      Logging:
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt CreateGenreLogs.Arn
+        Level: ALL
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref GenreExistsFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref GenreCreateFunction
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GenresTable
+        - CloudWatchLogsFullAccess
+      DefinitionUri: src/statemachine/genre/create-genre.asl.json
+
+  GenreExistsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/genre
+      Handler: genreExists.lambdaHandler
+  GenreCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/functions/genre
+      Handler: genreCreate.lambdaHandler
+
   BooksTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -29,7 +168,6 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
-  # Tabla DynamoDB para libros
   AuthorsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -65,3 +203,47 @@ Resources:
         - AttributeName: name
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Ref UserPoolName
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      UsernameConfiguration:
+        CaseSensitive: false
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+          RequireUppercase: false
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: !Ref UserPoolClientName
+      GenerateSecret: false
+      RefreshTokenValidity: 30
+
+# Outputs:
+#   AppSyncEndpoint:
+#     Value: !GetAtt GraphQLApi.GraphQLUrl
+#     Description: Endpoint for GraphQL API
+#   ValidationStateMachineArn:
+#     Value: !Ref GenreStateMachine
+#     Description: validation state machine ARN
+
+Outputs:
+  ValidationStateMachineArn:
+    Description: create genre state machine ARN
+    Value: !Ref CreateGenreStateMachine
+  ValidationAPIUrl:
+    Description: url to call the validation state machine
+    Value: !Sub https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/dev/
